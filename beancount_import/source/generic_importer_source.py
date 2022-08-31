@@ -13,12 +13,14 @@ Author: Sufiyan Adhikari(github.com/dumbPy)
 """
 
 import os
+from pathlib import Path
 from glob import glob
 from collections import OrderedDict
 import itertools
+import datetime
 from typing import Hashable, List, Dict, Optional
 
-from beancount.core.data import Balance, Transaction, Posting,  Directive
+from beancount.core.data import Balance, Transaction, Posting, Directive
 from beancount.core.amount import Amount
 from beancount.core.convert import get_weight
 from beancount.ingest.importer import ImporterProtocol
@@ -28,8 +30,16 @@ from beancount.parser.booking_full import convert_costspec_to_cost
 from ..matching import FIXME_ACCOUNT, SimpleInventory
 from . import ImportResult, SourceResults
 from ..journal_editor import JournalEditor
-from .description_based_source import DescriptionBasedSource, get_pending_and_invalid_entries
-from .mint import _get_key_from_posting
+from .description_based_source import DescriptionBasedSource, \
+    get_pending_and_invalid_entries
+
+
+def _get_key_from_posting(entry: Transaction, posting: Posting,
+                          source_postings: List[Posting], source_desc: str,
+                          posting_date: datetime.date, document: str):
+    del entry
+    del source_postings
+    return (posting.account, posting_date, posting.units, source_desc, document)
 
 
 class ImporterSource(DescriptionBasedSource):
@@ -61,12 +71,13 @@ class ImporterSource(DescriptionBasedSource):
 
         entries = OrderedDict() #type: Dict[Hashable, List[Directive]]
         for f in self.files:
+            file_name = (Path(f.name).name)
             f_entries = self.importer.extract(f, existing_entries=journal.entries)
             # collect  all entries in current statement, grouped by hash
             hashed_entries = OrderedDict() #type: Dict[Hashable, Directive]
             for entry in f_entries:
                 key_ = self._get_key_from_imported_entry(entry)
-                self._add_description(entry)
+                self._add_description(entry, file_name)
                 hashed_entries.setdefault(key_, []).append(entry)
             # deduplicate across statements
             for key_ in hashed_entries:
@@ -86,7 +97,7 @@ class ImporterSource(DescriptionBasedSource):
             make_import_result=self._make_import_result,
             results=results)
 
-    def _add_description(self, entry: Transaction):
+    def _add_description(self, entry: Transaction, file_name: str):
         if not isinstance(entry, Transaction): return None
         postings = entry.postings #type: List[Posting]
         to_mutate = []
@@ -95,6 +106,7 @@ class ImporterSource(DescriptionBasedSource):
             if isinstance(posting.meta, dict):
                 posting.meta["source_desc"] = entry.narration
                 posting.meta["date"] = entry.date
+                posting.meta["document"] = file_name
                 break
             else:
                 to_mutate.append(i)
@@ -102,7 +114,10 @@ class ImporterSource(DescriptionBasedSource):
         for i in to_mutate:
             p = postings.pop(i)
             p = Posting(p.account, p.units, p.cost, p.price, p.flag,
-                        {"source_desc":entry.narration, "date": entry.date})
+                        {"source_desc": entry.narration,
+                         "date": entry.date,
+                         "document": file_name
+                         })
             postings.insert(i, p)
 
     def _get_source_posting(self, entry:Transaction) -> Optional[Posting]:
@@ -119,10 +134,13 @@ class ImporterSource(DescriptionBasedSource):
         source_posting = self._get_source_posting(entry)
         if source_posting is None:
             raise ValueError("entry {} has no postings for account: {}".format(entry, self.account))
+
+        document = source_posting.meta.get("document", None) if source_posting.meta else None
         return (self.account,
                 entry.date,
                 source_posting.units,
-                entry.narration)
+                entry.narration,
+                document)
 
     def _make_import_result(self, imported_entry:Directive):
         if isinstance(imported_entry, Transaction): balance_amounts(imported_entry)

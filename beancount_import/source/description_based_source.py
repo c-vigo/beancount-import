@@ -18,8 +18,9 @@ MATCHED_METADATA_KEYS = frozenset(SOURCE_DESC_KEYS)
 
 
 def get_posting_source_descs(
-        posting: Posting) -> Iterable[Tuple[str, datetime.date]]:
+        posting: Posting) -> Iterable[Tuple[str, datetime.date, str]]:
     posting_date = posting.meta.get(POSTING_DATE_KEY, None)
+    document = posting.meta.get("document", None)
 
     # To handle duplicate downloaded entries (hopefully rare), we allow multiple source_desc values per posting.
     for sd_key in SOURCE_DESC_KEYS:
@@ -28,7 +29,7 @@ def get_posting_source_descs(
             if posting_date is None:
                 raise RuntimeError(
                     'Posting date is missing on entry: %r' % posting)
-            yield (source_desc, posting_date)
+            yield (source_desc, posting_date, document)
 
 
 def get_account_mapping(accounts: Dict[str, Open], metadata_key: str
@@ -69,7 +70,7 @@ RawEntryKey = TypeVar('RawEntryKey')
 def get_pending_and_invalid_entries(
         raw_entries: Iterable[RawEntry], journal_entries: Iterable[Directive],
         account_set: AbstractSet[str], get_key_from_posting: Callable[[
-            Transaction, Posting, List[Posting], str, datetime.date
+            Transaction, Posting, List[Posting], str, datetime.date, str
         ], RawEntryKey],
         get_key_from_raw_entry: Callable[[RawEntry], RawEntryKey],
         make_import_result: Callable[[RawEntry], Transaction],
@@ -86,9 +87,9 @@ def get_pending_and_invalid_entries(
                 continue
             if posting.account not in account_set:
                 continue
-            for source_desc, posting_date in get_posting_source_descs(posting):
+            for source_desc, posting_date, document in get_posting_source_descs(posting):
                 key = get_key_from_posting(entry, posting, postings,
-                                           source_desc, posting_date)
+                                           source_desc, posting_date, document)
                 if key is None:
                     continue
                 matched_postings.setdefault(key, []).append((entry, posting))
