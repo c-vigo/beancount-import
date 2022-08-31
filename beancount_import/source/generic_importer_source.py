@@ -169,15 +169,16 @@ def balance_amounts(txn:Transaction)-> None:
     for posting in txn.postings:
         inventory += get_weight(convert_costspec_to_cost(posting))
     for currency in inventory:
-        txn.postings.append(
-            Posting(
-                account=FIXME_ACCOUNT,
-                units=Amount(currency=currency, number=-inventory[currency]),
-                cost=None,
-                price=None,
-                flag=None,
-                meta={},
-            ))
+        if abs(inventory[currency]) > 0.001:
+            txn.postings.append(
+                Posting(
+                    account=FIXME_ACCOUNT,
+                    units=Amount(currency=currency, number=-inventory[currency]),
+                    cost=None,
+                    price=None,
+                    flag=None,
+                    meta={},
+                ))
 
 
 def load(spec, log_status):
