@@ -113,8 +113,13 @@ class BundleFrontendCommand(setuptools.command.build_py.build_py):
             self.skip_rebuild = False
 
     def run(self):
+        # Check if frontend files already exist and skip build if they do
+        bundle_path = os.path.join(frontend_dist_dir, 'app.js')
+        if os.path.exists(bundle_path):
+            print('Skipping rebuild of frontend bundle since %s already exists' % (bundle_path, ))
+            return
+
         if self.skip_rebuild:
-            bundle_path = os.path.join(frontend_dist_dir, 'app.js')
             if os.path.exists(bundle_path):
                 print('Skipping rebuild of frontend bundle since %s already exists' % (bundle_path, ))
                 return
